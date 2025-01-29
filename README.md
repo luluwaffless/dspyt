@@ -1,5 +1,6 @@
-<p align="center"><img src="https://raw.githubusercontent.com/luluwaffless/dspyt/refs/heads/main/downloaded/cover.png"></p>
 # <p align="center">dspyt 🎶 [![forthebadge](https://forthebadge.com/images/badges/made-with-javascript.svg)](https://forthebadge.com)</p>
+<p align="center"><img src="https://raw.githubusercontent.com/luluwaffless/dspyt/refs/heads/main/downloaded/cover.png"></p>
+<hr>
 a script to easily download your spotify playlist from youtube
 # requirements 📚
 - [node.js & npm](https://nodejs.org/)
