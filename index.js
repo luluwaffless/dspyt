@@ -1,7 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { fileTypeFromBuffer } from 'file-type';
 import { dirname, normalize } from 'node:path';
-import { stringify } from 'node:querystring';
 import { fileURLToPath } from 'node:url';
 import youtubedl from 'youtube-dl-exec';
 import promptSync from 'prompt-sync';
@@ -12,6 +11,8 @@ import dotenv from 'dotenv';
 import chalk from 'chalk';
 import axios from 'axios';
 dotenv.config();
+
+const stringify = (data) => new URLSearchParams(data).toString();
 
 let queries = JSON.parse(readFileSync("queries.json", "utf8"));
 const saveQueries = () => writeFileSync("queries.json", JSON.stringify(queries));
@@ -39,9 +40,10 @@ const parseResults = (results) => {
     ).join('\n');
 };
 
+const adapt = (str) => str.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^\p{L}\p{N} ]/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
 const getMusicMatch = async (results, title, artist, album, searchQuery) => {
     for (const result of results) {
-        if (result.name === title && result.artist.name === artist && result.album.name === album) {
+        if (adapt(result.name) === adapt(title) && adapt(result.artist.name) === adapt(artist) && adapt(result.album.name) === adapt(album)) {
             if (!queries[searchQuery]) {
                 queries[searchQuery] = result.videoId;
                 saveQueries();
@@ -51,12 +53,13 @@ const getMusicMatch = async (results, title, artist, album, searchQuery) => {
     }
     console.log(`${chalk.yellow("[WARN]")} No exact match found for ${chalk.greenBright(searchQuery)}. Review the alternatives:\n${parseResults(results)}`);
     const choice = prompt(`${chalk.blue("[INPUT]")} Enter your choice, a video ID if not listed, or press ENTER to choose the first: `);
-    const parsedChoice = results[Number(choice) - 1] || results[0] || { videoId: choice, name: title, artist: { name: artist }, album: { name: album } };
+    const selectedResult = results[Number(choice) - 1] || results[0];
+    const videoId = choice && isNaN(choice) ? choice : selectedResult.videoId;
     if (!queries[searchQuery]) {
-        queries[searchQuery] = parsedChoice.videoId;
+        queries[searchQuery] = videoId;
         saveQueries();
     }
-    return parsedChoice.videoId;
+    return videoId;
 };
 
 const downloadTrack = async (track) => {
@@ -178,7 +181,9 @@ const processPlaylist = async () => {
                 headers: { 'Authorization': 'Bearer ' + accessToken }
             });
             if (playlistData.status === 200) {
-                console.log(`${chalk.green("[SUCCESS]")} Playlist "${playlistData.data.name}" by ${playlistData.data.owner.display_name} retrieved successfully.`);
+                const tracks = playlistData.data.tracks.total;
+                const requests = Math.ceil(tracks / 100);
+                console.log(`${chalk.green("[SUCCESS]")} Playlist "${playlistData.data.name}" by ${playlistData.data.owner.display_name} with ${tracks} track${tracks === 1 ? '' : 's'} (${requests} request${requests === 1 ? '' : 's'}) retrieved successfully.`);
                 session.playlistName = removeInvalidCharacters(playlistData.data.name);
                 if (!existsSync(normalize(`${__dirname}/downloaded/${session.playlistName}`))) {
                     mkdirSync(normalize(`${__dirname}/downloaded/${session.playlistName}`));
@@ -241,13 +246,21 @@ const processPlaylist = async () => {
     if (!existsSync(normalize(`${__dirname}/downloaded/`))) mkdirSync(normalize(`${__dirname}/downloaded/`));
     let playlistValid = false;
     while (!playlistValid) {
-        const playlist = prompt(`${chalk.blue("[INPUT]")} Enter your Spotify playlist URL: `);
-        if (playlist.startsWith("https://open.spotify.com/playlist/") && playlist.length === 56) {
-            playlistValid = true;
-            session.playlist = playlist.substr(34);
-            console.log(`${chalk.green("[SUCCESS]")} Playlist URL accepted.`);
-        } else {
-            console.log(`${chalk.yellow("[WARN]")} Please enter a valid URL.`);
+        try {
+            const input = prompt(`${chalk.blue("[INPUT]")} Enter your Spotify playlist URL: `);
+            const playlist = new URL(input);
+            const path = playlist.pathname.split("/");
+            const type = path[path.length - 2];
+            const id = path[path.length - 1];
+            if (playlist.hostname === "open.spotify.com" && type === "playlist" && id.length === 22) {
+                playlistValid = true;
+                session.playlist = id;
+                console.log(`${chalk.green("[SUCCESS]")} Playlist URL accepted.`);
+            } else {
+                console.log(`${chalk.yellow("[WARN]")} Please enter a valid URL.`);
+            }
+        } catch (error) {
+            console.log(`${chalk.red("[ERROR]")} Please enter an actual URL.`);
         }
     }
     await authenticateSpotify();

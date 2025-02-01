@@ -27,7 +27,7 @@ pkg install nodejs
 pkg install ffmpeg
 pkg install python
 ```
-3. follow the PC steps (note when copying your playlist URL: spotify usually generates a query that always starts with `?`, the characters after your playlist's ID, delete them so the script is able to properly detect the playlist)
+3. follow the PC steps
 4. use the following commands to move the playlist from the terminal to the storage's music folder (replace `{PLAYLIST_NAME}` with your actual playlist name):
 ```sh
 termux-setup-storage
